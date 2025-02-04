@@ -18,6 +18,7 @@ use crate::{
     KeccakBuilder,
 };
 
+
 type Bytes32 = [u8; 32];
 
 /// Verify merkle proofs.
@@ -359,7 +360,13 @@ mod tests {
     use rand::{thread_rng, RngCore};
 
     use super::{Bytes32, KeccakBuilder, Verifier};
-    use crate::hash::{commutative_hash_pair, BuildHasher};
+    use crate::hash::{commutative_hash_pair, BuildHasher,Hasher};
+    use anyhow::{Ok, Result};
+use ethers_core::types::Bytes; // Use ethers_core consistently
+use ethers_core::utils::{hex};
+use merkle_tree_rs::core::{make_merkle_tree, get_proof, process_proof};
+
+
 
     /// Shorthand for declaring variables converted from a hex literal to a
     /// fixed 32-byte slice.
@@ -660,5 +667,249 @@ mod tests {
             &malicious_leaves,
         );
         assert!(verification.is_err());
+    }
+
+    // #[test]
+    // fn test_verify_leaf_c()  {
+    //     // Define the leaves.
+    //     let letters = ["a", "b", "c", "d", "e", "f"];
+
+    //     // Generate leaves by hashing each letter.
+    //     // Each hash is a 32-byte value.
+    //     let leaves: Vec<Bytes> = letters
+    //         .iter()
+    //         .map(|&s| Bytes::from(keccak256(s.as_bytes())))
+    //         .collect();
+
+    //     for leaf in leaves.iter()  {
+
+    //         println!("{}",leaf);
+            
+    //     }
+
+    //     // Build the Merkle tree using merkle_tree_rs.
+    //     // For n leaves, the tree will have (2 * n - 1) nodes.
+    //     let tree = make_merkle_tree(leaves);
+
+    //     // Print the Merkle root for debugging (tree[0] holds the root).
+    //     println!("Merkle Root: 0x{}", hex::encode(&tree[0]));
+
+    //     // With 6 leaves, the leaves are placed at the end of the tree vector in
+    //     // reverse order. That is:
+    //     //   - Input leaf index 0 ("a") goes to tree[10]
+    //     //   - Input leaf index 1 ("b") goes to tree[9]
+    //     //   - Input leaf index 2 ("c") goes to tree[8]
+    //     //   - Input leaf index 3 ("d") goes to tree[7]
+    //     //   - Input leaf index 4 ("e") goes to tree[6]
+    //     //   - Input leaf index 5 ("f") goes to tree[5]
+    //     // Therefore, leaf "c" is located at tree index 8.
+    //     let leaf_tree_index = 8;
+
+    //     // Extract the leaf "c" from the tree and convert it into a fixed
+    //     // 32-byte array.
+    //     let leaf_c: [u8; 32] = tree[leaf_tree_index]
+    //         .as_ref()
+    //         .try_into()
+    //         .expect("Leaf must be 32 bytes");
+
+    //     // Generate the Merkle proof for the leaf at index 8.
+    //     // The proof is a vector of sibling hashes.
+    //     let proof_vec = get_proof(tree.clone(), leaf_tree_index);
+
+    //     // Convert each proof element into a [u8; 32] array.
+    //     let proof: Vec<[u8; 32]> = proof_vec
+    //         .iter()
+    //         .map(|p| {
+    //             p.as_ref().try_into().expect("Proof element must be 32 bytes")
+    //         })
+    //         .collect();
+
+    //     // Convert the root into a [u8; 32] array.
+    //     let root: [u8; 32] =
+    //         tree[0].as_ref().try_into().expect("Root must be 32 bytes");
+
+    //     // Use the verifier to check that the proof is valid for leaf "c".
+    //     let verification = Verifier::verify(&proof, root, leaf_c);
+    //     println!("the ans is {}",verification);
+    //     assert!(
+    //         verification,
+    //         "Verification failed: leaf 'c' is not part of the Merkle tree."
+    //     );
+
+        
+    // }
+    fn keccak_hash(input: &[u8]) -> [u8; 32] {
+        let mut hasher = KeccakBuilder.build_hasher();
+        hasher.update(input);
+        hasher.finalize()
+    }
+    #[test]
+    fn test_verify_leaf_c() {
+        // Define the leaves.
+        let letters = ["a", "b", "c", "d", "e", "f"];
+
+        // Generate leaves by hashing each letter using the custom KeccakBuilder.
+        // Each hash is a 32-byte value.
+        let leaves: Vec<Bytes> = letters
+            .iter()
+            .map(|&s| Bytes::from(keccak_hash(s.as_bytes())))
+            .collect();
+
+        // Build the Merkle tree using merkle_tree_rs.
+        // For n leaves, the tree will have (2 * n - 1) nodes.
+        let tree = make_merkle_tree(leaves);
+
+        // Print the Merkle root for debugging (tree[0] holds the root).
+        println!("Merkle Root: 0x{}", hex::encode(&tree[0]));
+
+        // With 6 leaves, the leaves are placed at the end of the tree vector in
+        // reverse order. That is:
+        //   - Input leaf index 0 ("a") goes to tree[10]
+        //   - Input leaf index 1 ("b") goes to tree[9]
+        //   - Input leaf index 2 ("c") goes to tree[8]
+        //   - Input leaf index 3 ("d") goes to tree[7]
+        //   - Input leaf index 4 ("e") goes to tree[6]
+        //   - Input leaf index 5 ("f") goes to tree[5]
+        // Therefore, leaf "c" is located at tree index 8.
+        let leaf_tree_index = 8;
+
+        // Extract the leaf "c" from the tree and convert it into a fixed 32-byte array.
+        let leaf_c: [u8; 32] = tree[leaf_tree_index]
+            .as_ref()
+            .try_into()
+            .expect("Leaf must be 32 bytes");
+
+        // Generate the Merkle proof for the leaf at index 8.
+        // The proof is a vector of sibling hashes.
+        let proof_vec = get_proof(tree.clone(), leaf_tree_index);
+
+        // Convert each proof element into a [u8; 32] array.
+        let proof: Vec<[u8; 32]> = proof_vec
+            .iter()
+            .map(|p| p.as_ref().try_into().expect("Proof element must be 32 bytes"))
+            .collect();
+
+        // Convert the root into a [u8; 32] array.
+        let root: [u8; 32] = tree[0]
+            .as_ref()
+            .try_into()
+            .expect("Root must be 32 bytes");
+
+        // Use the verifier to check that the proof is valid for leaf "c".
+        let verification = Verifier::verify(&proof, root, leaf_c);
+        println!("Verification result: {}", verification);
+        assert!(
+            verification,
+            "Verification failed: leaf 'c' is not part of the Merkle tree."
+        );
+
+        
+    }
+
+    #[test]
+    fn test_differential_verification_leaf_c() -> Result<()> {
+        let letters = ["a", "b", "c", "d", "e", "f"];
+        let leaves: Vec<Bytes> = letters
+            .iter()
+            .map(|&s| Bytes::from(keccak_hash(s.as_bytes())))
+            .collect();
+
+        // Print leaves in hex format.
+        println!("Leaves:");
+        for (i, leaf) in leaves.iter().enumerate() {
+            println!("  {}: 0x{}", i, hex::encode(leaf));
+        }
+
+        let tree = make_merkle_tree(leaves);
+        let root: [u8; 32] = tree[0]
+            .as_ref()
+            .try_into()
+            .expect("Root must be 32 bytes");
+        println!("Merkle Root: 0x{}", hex::encode(&root));
+
+        let leaf_tree_index = 8;
+        let leaf_c: [u8; 32] = tree[leaf_tree_index]
+            .as_ref()
+            .try_into()
+            .expect("Leaf must be 32 bytes");
+
+        let proof_vec = get_proof(tree.clone(), leaf_tree_index);
+        // Print each proof element in hex.
+        println!("Proof Elements:");
+        for (i, p) in proof_vec.iter().enumerate() {
+            println!("  {}: 0x{}", i, hex::encode(p));
+        }
+
+        let proof: Vec<[u8; 32]> = proof_vec
+            .iter()
+            .map(|p| p.as_ref().try_into().expect("Proof element must be 32 bytes"))
+            .collect();
+
+        let rebuilt_root_bytes = process_proof(tree[leaf_tree_index].clone(), &proof_vec);
+        let rebuilt_root: [u8; 32] = rebuilt_root_bytes
+            .as_ref()
+            .try_into()
+            .expect("Rebuilt root must be 32 bytes");
+        println!("Rebuilt Root from process_proof: 0x{}", hex::encode(&rebuilt_root));
+
+        assert_eq!(
+            rebuilt_root, root,
+            "Rebuilt root does not match the actual tree root."
+        );
+
+        let verification = Verifier::verify(&proof, root, leaf_c);
+        println!("Verifier::verify returned: {}", verification);
+        assert!(verification, "Verifier::verify returned false.");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_differential_verification_hardcoded() {
+        bytes! {
+           root = "9012f1e18a87790d2e01faace75aaaca38e53df437cdce2c0552464dda4af49c";
+           leaf = "0b42b6393c1f53060fe3ddbfcd7aadcca894465a5a438f69c87d790b2299b9b2";
+        }
+        let proof = bytes_array! {
+            "f1918e8562236eb17adc8502332f4c9c82bc14e19bfc0aa10ab674ff75b3d2f3",
+            "805b21d846b189efaeb0377d6bb0d201b3872a363e607c25088f025b0c6ae1f8",
+            "f0b49bb4b0d9396e0315755ceafaa280707b32e75e6c9053f5cdf2679dcd5c6a",
+        };
+
+        let root_bytes = Bytes::from(root);
+        let leaf_bytes = Bytes::from(leaf);
+        let proof_vec: Vec<Bytes> = proof.iter().map(|&p| Bytes::from(p)).collect();
+
+
+        let rebuilt_root_bytes = process_proof(leaf_bytes.clone(), &proof_vec);
+        println!("Rebuilt Root: 0x{}", hex::encode(&rebuilt_root_bytes));
+
+        let rebuilt_root: [u8; 32] = rebuilt_root_bytes
+            .as_ref()
+            .try_into()
+            .expect("Rebuilt root must be 32 bytes");
+        let expected_root: [u8; 32] = root_bytes
+            .as_ref()
+            .try_into()
+            .expect("Root must be 32 bytes");
+        let leaf_arr: [u8; 32] = leaf_bytes
+            .as_ref()
+            .try_into()
+            .expect("Leaf must be 32 bytes");
+        let proof_arr: Vec<[u8; 32]> = proof_vec
+            .iter()
+            .map(|b| {
+                b.as_ref()
+                    .try_into()
+                    .expect("Proof element must be 32 bytes")
+            })
+            .collect();
+
+        let verification = Verifier::verify(&proof_arr, expected_root, leaf_arr);
+        println!("Verifier::verify returned: {}", verification);
+     
+        assert_eq!(rebuilt_root, expected_root, "Rebuilt root does not match expected root");
+        assert!(verification, "Verifier::verify returned false");
+    
     }
 }
